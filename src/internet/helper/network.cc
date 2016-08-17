@@ -1,6 +1,6 @@
 /* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2011 The Boeing Company
+ * Copyright (c) 2015 Universite catholique de Louvain
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -39,6 +39,13 @@ Network::Network(uint32_t nbrOfNodes)
   NS_LOG_FUNCTION (this);
   m_router = CreateObject<Node> ();
   m_nodes.Create (nbrOfNodes);
+}
+
+Network::Network(NodeContainer nodes)
+{
+  NS_LOG_FUNCTION (this);
+  m_router = CreateObject<Node> ();
+  m_nodes = NodeContainer (nodes);
 }
 
 Ptr<Node>
@@ -89,7 +96,15 @@ Network::ConfigureL3(Ipv6Address ipv6Address, Ipv6Prefix &prefix, Ipv6ListRoutin
   NS_LOG_FUNCTION (this << ipv6Address << prefix);
   InternetStackHelper internetv6;
   internetv6.SetIpv4StackInstall (false);
-  internetv6.Install (m_nodes);
+  // internetv6.Install (m_nodes);
+
+  for (uint32_t i = 0; i < m_nodes.GetN(); ++i)
+  {
+    if (m_nodes.Get(i)->GetObject<Ipv6> () == 0)
+    {
+      internetv6.Install (m_nodes.Get(i));
+    }
+  }
 
   internetv6.SetRoutingHelper (listRH);
   internetv6.Install (m_router);
@@ -98,6 +113,7 @@ Network::ConfigureL3(Ipv6Address ipv6Address, Ipv6Prefix &prefix, Ipv6ListRoutin
 
   ipv6.SetBase (ipv6Address, prefix);
   m_ipv6Interfaces = ipv6.Assign (m_netDevices);
+  NS_ASSERT_MSG (m_ipv6Interfaces.GetN () != 0, "Network::ConfigureL3(): m_ipv6Interfaces.GetN () == 0");
   m_ipv6Interfaces.SetForwarding (0, true);
   m_ipv6Interfaces.SetDefaultRouteInAllNodes (0);
 }

@@ -1,6 +1,6 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2008 INRIA
+ * Copyright (c) 2015 Universite catholique de Louvain
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -15,10 +15,10 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
+ * Author: Lionel Metongnon <lionel.metongnon@uclouvain.be>
  */
+ 
 #include "sim-attack-helper.h"
-#include "ns3/scan-tools.h"
 #include "ns3/penetration-tools.h"
 #include "ns3/uinteger.h"
 #include "ns3/names.h"
@@ -48,36 +48,37 @@ ScanToolsHelper::SetAttribute (
 // }
 
 ApplicationContainer
-ScanToolsHelper::Install (Ptr<Node> node, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks) const
+ScanToolsHelper::Install (Ptr<Node> node, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks, ScanTools::ScanType scanType) const
 {
-  return ApplicationContainer (InstallPriv (node, targetedNetworks));
+  return ApplicationContainer (InstallPriv (node, targetedNetworks, scanType));
 }
 
 ApplicationContainer
-ScanToolsHelper::Install (std::string nodeName, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks) const
+ScanToolsHelper::Install (std::string nodeName, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks, ScanTools::ScanType scanType) const
 {
   Ptr<Node> node = Names::Find<Node> (nodeName);
-  return ApplicationContainer (InstallPriv (node, targetedNetworks));
+  return ApplicationContainer (InstallPriv (node, targetedNetworks, scanType));
 }
 
 ApplicationContainer
-ScanToolsHelper::Install (NodeContainer c, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks) const
+ScanToolsHelper::Install (NodeContainer c, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks, ScanTools::ScanType scanType) const
 {
   ApplicationContainer apps;
   for (NodeContainer::Iterator i = c.Begin (); i != c.End (); ++i)
     {
-      apps.Add (InstallPriv (*i, targetedNetworks));
+      apps.Add (InstallPriv (*i, targetedNetworks, scanType));
     }
 
   return apps;
 }
 
 Ptr<Application>
-ScanToolsHelper::InstallPriv (Ptr<Node> node, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks) const
+ScanToolsHelper::InstallPriv (Ptr<Node> node, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks, ScanTools::ScanType scanType) const
 {
   Ptr<ScanTools> app = m_factory.Create<ScanTools> ();
   node->AddApplication (app);
   app->SetTargetedNetworks (targetedNetworks);
+  app->SetScanType (scanType);
 
   return app;
 }

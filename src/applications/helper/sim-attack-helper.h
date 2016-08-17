@@ -1,6 +1,6 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2008 INRIA
+ * Copyright (c) 2015 Universite catholique de Louvain
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -15,8 +15,9 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
+ * Author: Lionel Metongnon <lionel.metongnon@uclouvain.be>
  */
+ 
 #ifndef SIM_ATTACK_HELPER_H
 #define SIM_ATTACK_HELPER_H
 
@@ -26,6 +27,7 @@
 #include "ns3/object-factory.h"
 #include "ns3/ipv4-address.h"
 #include "ns3/ipv6-address.h"
+#include "ns3/scan-tools.h"
 #include <map>
 
 namespace ns3 {
@@ -72,7 +74,7 @@ public:
    * \returns An ApplicationContainer that holds a Ptr<Application> to the 
    *          application created
    */
-  ApplicationContainer Install (Ptr<Node> node, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks) const;
+  ApplicationContainer Install (Ptr<Node> node, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks, ScanTools::ScanType scanType = ScanTools::INTERLACE) const;
 
   /**
    * Create a udp echo client application on the specified node.  The Node
@@ -84,7 +86,7 @@ public:
    * \returns An ApplicationContainer that holds a Ptr<Application> to the 
    *          application created
    */
-  ApplicationContainer Install (std::string nodeName, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks) const;
+  ApplicationContainer Install (std::string nodeName, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks, ScanTools::ScanType scanType = ScanTools::INTERLACE) const;
 
   /**
    * \param c the nodes
@@ -93,7 +95,7 @@ public:
    *
    * \returns the applications created, one application per input node.
    */
-  ApplicationContainer Install (NodeContainer c, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks) const;
+  ApplicationContainer Install (NodeContainer c, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks, ScanTools::ScanType scanType = ScanTools::INTERLACE) const;
 
 private:
   /**
@@ -103,7 +105,7 @@ private:
    * \param node The node on which an UdpEchoClient will be installed.
    * \returns Ptr to the application installed.
    */
-  Ptr<Application> InstallPriv (Ptr<Node> node, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks) const;
+  Ptr<Application> InstallPriv (Ptr<Node> node, std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks, ScanTools::ScanType scanType) const;
   ObjectFactory m_factory; //!< Object factory.
 };
 

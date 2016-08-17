@@ -1,7 +1,7 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright 2007 University of Washington
- * 
+ * Copyright (c) 2015 Universite catholique de Louvain
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation;
@@ -14,7 +14,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * Author: Lionel Metongnon <lionel.metongnon@uclouvain.be>
  */
+ 
 #include "ns3/log.h"
 #include "ns3/abort.h"
 #include "ns3/assert.h"
@@ -45,10 +48,14 @@ CoapServer::GetTypeId (void)
     .SetGroupName("Applications")
     .AddConstructor<CoapServer> ()
     .AddAttribute ("Interval", 
-                   "The time to wait between packets",
-                   // TimeValue (Seconds (1.0)),
-                   TimeValue (Time ("2ms")),
+                   "The time between two ",
+                   TimeValue (Seconds (60)),
                    MakeTimeAccessor (&CoapServer::m_interval),
+                   MakeTimeChecker ())
+    .AddAttribute ("Delay", 
+                   "The time to wait between packets",
+                   TimeValue (MilliSeconds (200)),
+                   MakeTimeAccessor (&CoapServer::m_delay),
                    MakeTimeChecker ())
     // .AddAttribute ("ClientsAddress",
     //                "The list of the CoapServer clientsof this server Node.",
@@ -57,7 +64,7 @@ CoapServer::GetTypeId (void)
     //                MakeObjectVectorChecker<Ipv6Address> ())
     .AddAttribute ("RemotePort", 
                    "The destination port of the outbound packets",
-                   UintegerValue (80),
+                   UintegerValue (5683),
                    MakeUintegerAccessor (&CoapServer::m_peerPort),
                    MakeUintegerChecker<uint16_t> ())
     .AddAttribute ("PacketSize", "Size of echo data in outbound packets",
@@ -79,12 +86,16 @@ CoapServer::CoapServer ()
   m_socket = 0;
   m_sendEvent = EventId ();
   m_index = 0;
+  m_data = 0;
 }
 
 CoapServer::~CoapServer()
 {
   NS_LOG_FUNCTION (this);
   m_socket = 0;
+
+  delete [] m_data;
+  m_data = 0;
 }
 
 void 
@@ -105,13 +116,6 @@ void
 CoapServer::StartApplication (void)
 {
   NS_LOG_FUNCTION (this);
-}
-
-void 
-CoapServer::SetClientAddresses (std::vector<Ipv6Address> &clientAddresses)
-{
-  NS_LOG_FUNCTION (this);
-  m_clientAddresses = clientAddresses;
   if (m_clientAddresses.empty ())
     {
       NS_LOG_INFO ("Any Clients are provide to the server");
@@ -119,8 +123,16 @@ CoapServer::SetClientAddresses (std::vector<Ipv6Address> &clientAddresses)
     }
   else
     {
+      SetFill ("Get Temperature Data From The Node");
       Prepare ();
     }
+}
+
+void 
+CoapServer::SetClientAddresses (std::vector<Ipv6Address> &clientAddresses)
+{
+  NS_LOG_FUNCTION (this);
+  m_clientAddresses = clientAddresses;
 }
 
 void
@@ -139,16 +151,16 @@ CoapServer::Prepare (void)
     }
   m_socket->Connect (Inet6SocketAddress (m_clientAddresses.at (m_index), m_peerPort));
   m_socket->SetRecvCallback (MakeCallback (&CoapServer::HandleRead, this));
-
   if (m_index == 0)
     {
-      ScheduleTransmit (Seconds (60));
+      ScheduleTransmit (m_interval);
     }
   else
     {
-      ScheduleTransmit (Seconds (0.2));
+      ScheduleTransmit (m_delay);
     }
 }
+
 void 
 CoapServer::StopApplication ()
 {
@@ -160,6 +172,7 @@ CoapServer::StopApplication ()
       m_socket->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
       m_socket = 0;
     }
+  Simulator::Cancel (m_sendEvent);
 }
 
 void 
@@ -183,11 +196,33 @@ CoapServer::GetDataSize (void) const
 }
 
 void 
+CoapServer::SetFill (std::string fill)
+{
+  NS_LOG_FUNCTION (this << fill);
+
+  uint32_t dataSize = fill.size () + 1;
+
+  if (dataSize != m_size)
+    {
+      if (m_data)
+        {
+          delete [] m_data;
+        }
+      m_data = new uint8_t [dataSize];
+    }
+
+  memcpy (m_data, fill.c_str (), dataSize);
+
+  //
+  // Overwrite packet size attribute.
+  //
+  m_size = dataSize; 
+}
+
+void 
 CoapServer::ScheduleTransmit (Time dt)
 {
   NS_LOG_FUNCTION (this << dt);
-    // m_sendEvent = Simulator::Schedule (Time ("20ms"), &CoapServer::Send, this);
-
   m_sendEvent = Simulator::Schedule (dt, &CoapServer::Send, this);
 }
 
@@ -198,7 +233,8 @@ CoapServer::Send (void)
 
   NS_ASSERT (m_sendEvent.IsExpired ());
 
-  Ptr<Packet> p = Create<Packet> (100);
+  Ptr<Packet> p = Create<Packet> (m_data, m_size);
+  // Ptr<Packet> p = Create<Packet> (m_size);
   // call to the trace sinks before the packet is actually sent,
   // so that tags added to the packet can be sent as well
   m_txTrace (p);

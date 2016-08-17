@@ -1,7 +1,7 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright 2007 University of Washington
- * 
+ * Copyright (c) 2015 Universite catholique de Louvain
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation;
@@ -14,7 +14,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * Author: Lionel Metongnon <lionel.metongnon@uclouvain.be>
  */
+
 #include "ns3/log.h"
 #include "ns3/abort.h"
 #include "ns3/assert.h"
@@ -31,6 +34,8 @@
 #include "scan-tools.h"
 #include "penetration-tools.h"
 
+#include <fstream>
+
 namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("ScanToolsApplication");
@@ -46,8 +51,7 @@ ScanTools::GetTypeId (void)
     .AddConstructor<ScanTools> ()
     .AddAttribute ("Interval", 
                    "The time to wait between packets",
-                   // TimeValue (Seconds (1.0)),
-                   TimeValue (Time ("2ms")),
+                   TimeValue (MilliSeconds (20)),
                    MakeTimeAccessor (&ScanTools::m_interval),
                    MakeTimeChecker ())
     .AddAttribute ("MaxRange", 
@@ -95,6 +99,7 @@ ScanTools::ScanTools ()
   m_sendEvent = EventId ();
   m_data = 0;
   m_dataSize = 0;
+  m_scanType = INTERLACE;
 }
 
 ScanTools::~ScanTools()
@@ -127,7 +132,6 @@ ScanTools::StartApplication (void)
 {
   NS_LOG_FUNCTION (this);
   GenerateAddresses ();
-  // StartScanning ();
 }
 
 void
@@ -139,6 +143,12 @@ ScanTools::SetTargetedNetworks (
   m_targetedNetworks = targetedNetworks;
 }
 
+void
+ScanTools::SetScanType (ScanTools::ScanType scanType)
+{
+  NS_LOG_FUNCTION (this);
+  m_scanType = scanType;
+}
 void
 ScanTools::Scanning ()
 {
@@ -156,7 +166,7 @@ ScanTools::Scanning ()
       m_socket->Connect (Inet6SocketAddress (m_peerAddress, m_peerPort));
       m_socket->SetRecvCallback (MakeCallback (&ScanTools::HandleRead, this));
 
-      ScheduleTransmit (Seconds (m_interval));
+      ScheduleTransmit (m_interval);
     }
 }
 
@@ -166,14 +176,21 @@ ScanTools::GenerateAddresses ()
   NS_LOG_FUNCTION (this);
   Ipv6AddressList ipv6AddressList = Ipv6AddressList();
   Ipv6AddressList ipv6AddressList6LoWPAN = Ipv6AddressList();
-  for (std::map<Ipv6Address, Ipv6Prefix>::iterator i = m_targetedNetworks.begin(); i != m_targetedNetworks.end(); ++i)
+  int index = 0;
+  for (std::map<Ipv6Address, Ipv6Prefix>::iterator i = m_targetedNetworks.begin(); i != m_targetedNetworks.end(); ++i, ++index)
     {
       ipv6AddressList.Init (i->first, i->second, Ipv6Address ("::200:ff:fe00:1"));
       ipv6AddressList6LoWPAN.Init (i->first, i->second, Ipv6Address ("::ff:fe00:1"));
       for (uint32_t k = 0; k < m_count; ++k)
         {
-          m_targetedAddresses.push_back (ipv6AddressList6LoWPAN.NextAddress (i->second));
-          m_targetedAddresses.push_back (ipv6AddressList.NextAddress (i->second));
+          if (m_scanType == INTERLACE || m_scanType == SIXLOWPAN_ONLY || (m_scanType == SIXLOWPAN_FIRST && index % 2 == 0) || (m_scanType == WIFI_FIRST && index % 2 != 0))
+            {
+              m_targetedAddresses.push_back (ipv6AddressList6LoWPAN.NextAddress (i->second));
+            }
+          if (m_scanType == INTERLACE || m_scanType == WIFI_ONLY || (m_scanType == WIFI_FIRST && index % 2 == 0) || (m_scanType == SIXLOWPAN_FIRST && index % 2 != 0))
+            {
+              m_targetedAddresses.push_back (ipv6AddressList.NextAddress (i->second));
+            }
         }
     }
     // for (std::list<Ipv6Address>::iterator i = m_targetedAddresses.begin(); i != m_targetedAddresses.end(); ++i)
@@ -181,6 +198,95 @@ ScanTools::GenerateAddresses ()
     //     NS_LOG_INFO (*i);
     //   }
     Scanning ();
+}
+
+void
+ScanTools::Save (void)
+{
+  if (m_targetedAddresses.empty ())
+    {
+      std::ostringstream oss;
+      oss << GetDataSize();
+      oss << "_";
+      oss << m_victimAddresses.size();
+
+      std::ofstream resultFile, detailResultFile, plot;
+      resultFile.open ( std::string("./data/"+oss.str()+"_scanning.rst").c_str(), std::ofstream::out | std::ofstream::trunc);
+      detailResultFile.open ( std::string("./data/"+oss.str()+"_scanning_details.rst").c_str(), std::ofstream::out | std::ofstream::trunc);
+      plot.open ( std::string("./plot/"+oss.str()+"_scanning.dat").c_str(), std::ofstream::out | std::ofstream::trunc);
+      plot << "#\tX\tY\tZ\tU" << std::endl;
+      // for (std::list<Ipv6Address>::iterator i = m_victimAddresses.begin(); i != m_victimAddresses.end(); ++i)
+      //   {
+      //     NS_LOG_INFO (*i);
+      //   }
+      bool data (false);
+      Time delta;
+      Time meanTime (0), maxTime (0), minTime (0);
+      uint8_t oldIp[16], newIp[16];
+      uint32_t count = 0;
+      memset(oldIp, 0, sizeof(oldIp));
+      for (std::map<Ipv6Address, std::vector<Time> >::iterator i = record.begin();
+         i != record.end(); ++i)
+        {       
+          if (i->second.size() < 2)
+            {
+              // record.erase (i);
+              // plot << i->first <<"\t"<< i->second.at(0).GetSeconds() <<"\t"<< i->second.at(0).GetSeconds() <<"\t"<< -1 << std::endl;
+              continue;
+            }
+          data = true;
+          delta = i->second.at (1) - i->second.at (0);
+
+          // plot data
+          plot << i->first <<"\t"<< i->second.at(0).GetSeconds() <<"\t"<< i->second.at(1).GetSeconds() <<"\t"<< delta.GetSeconds() << std::endl;
+
+          i->first.GetBytes (newIp);
+          memset (newIp + 8, 0x00, 8);
+          Ipv6Address networkAddress (newIp);
+
+          if (strlen((char *)oldIp) == 0) 
+            {
+              memcpy(oldIp, newIp, sizeof(oldIp));
+              meanTime = maxTime = minTime = delta;
+              count = 1;
+            }
+          else
+            {
+              if (networkAddress.IsEqual(Ipv6Address(oldIp))) 
+                {
+                  meanTime += delta;
+                  maxTime = std::max(maxTime, delta);
+                  minTime = std::min(minTime, delta);
+                  ++count;
+                }
+              else 
+                {
+                  resultFile << Ipv6Address(oldIp) << "\tmin : " << minTime.GetSeconds() * 1000 << "ms"
+                    << "\tmax : " << maxTime.GetSeconds() * 1000 << "ms" << "\tmean : " 
+                    << (meanTime/count).GetSeconds() * 1000 << "ms" << std::endl;
+                  // NS_LOG_INFO ("" << Ipv6Address(oldIp) << "\tmin : " << minTime.GetSeconds() * 1000 << "ms"
+                  //   << "\tmax :" << maxTime.GetSeconds() * 1000 << "ms" << "\tmean : " << (meanTime/count).GetSeconds() * 1000 << "ms");
+                  memcpy(oldIp, newIp, sizeof(oldIp));
+                  meanTime = maxTime = minTime = delta;
+                  count = 1;
+                }
+            }
+          // NS_LOG_INFO (i->first<< "\tSending time : " << i->second.at (0).GetSeconds() << "s\tIncomming time : " 
+          //   <<  i->second.at (1).GetSeconds() << "s\tdelta " << delta.GetSeconds() * 1000 << "ms" );
+          detailResultFile << i->first<< "\tSending time : " << i->second.at (0).GetSeconds() << "s\tIncomming time : " 
+            <<  i->second.at (1).GetSeconds() << "s\tdelta " << delta.GetSeconds() * 1000 << "ms" << std::endl;
+        }
+
+      if (data)
+        {
+          resultFile << Ipv6Address(oldIp) << "\tmin : " << minTime.GetSeconds() * 1000 << "ms"
+          << "\tmax : " << maxTime.GetSeconds() * 1000 << "ms" << "\tmean : " 
+          << (meanTime/count).GetSeconds() * 1000 << "ms"<< std::endl;
+        }
+      resultFile.close();
+      detailResultFile.close();
+      plot.close ();
+    }
 }
 
 void 
@@ -194,22 +300,12 @@ ScanTools::StopApplication ()
       m_socket->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
       m_socket = 0;
     }
-
+  Simulator::Cancel (m_sendEvent);
+  Save ();
   // Retrieve the penetration application
-  // Ptr<Application> application = GetNode()->GetApplication(1);
-  // Ptr<PenetrationTools> penetrationTool = DynamicCast<PenetrationTools>(application);
-  for (std::list<Ipv6Address>::iterator i = m_victimAddresses.begin(); i != m_victimAddresses.end(); ++i)
-    {
-      NS_LOG_INFO (*i);
-    }
-    Ptr<PenetrationTools> penetrationTool = GetNode()->GetApplication(1)->GetObject <PenetrationTools>();
-    penetrationTool->StartPenetration (m_victimAddresses);
-
-  //Create a callback to alert penetration tool a the end of the scanning
-  // Callback<void, std::list<Ipv6Address> > callback = MakeCallback (&PenetrationTools::StartPenetration, &penetrationTool);
-  // Callback<void, uint32_t > callback = MakeCallback (&PenetrationTools::SetDataSize, &penetrationTool);
-  // callback (ipv6AddressList.GetTargetAddressesList ()); 
-  // ipv6AddressList.GetTargetAddressesList ();
+  Ptr<PenetrationTools> penetrationTool = GetNode()->GetApplication(1)->GetObject <PenetrationTools>();
+  std::list<Ipv6Address> victimAddresses (m_victimAddresses.begin (), m_victimAddresses.end ());
+  penetrationTool->StartPenetration (victimAddresses);
 }
 
 void 
@@ -238,10 +334,8 @@ ScanTools::GetDataSize (void) const
 void 
 ScanTools::ScheduleTransmit (Time dt)
 {
-  NS_LOG_FUNCTION (this << "20ms");
-  // m_sendEvent = Simulator::Schedule (dt, &ScanTools::Send, this);
-  m_sendEvent = Simulator::Schedule (Time ("20ms"), &ScanTools::Send, this);
-  // NS_LOG_INFO (Time ("20ms"));
+  NS_LOG_FUNCTION (this << dt);
+  m_sendEvent = Simulator::Schedule (dt, &ScanTools::Send, this);
 }
 
 void 
@@ -282,7 +376,12 @@ ScanTools::Send (void)
 
   ++m_sent;
 
-  NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s attacker sent " << m_size << " bytes to " <<
+  Time outcommingPacketTime(Simulator::Now ());
+  // Insert in a map
+  record.insert (std::pair<Ipv6Address, std::vector<Time> >(m_peerAddress, std::vector<Time> () ));
+  record[m_peerAddress].push_back (outcommingPacketTime);
+
+  NS_LOG_INFO ("At time " << outcommingPacketTime.GetSeconds () << "s attacker sent " << m_size << " bytes to " <<
                m_peerAddress << " port " << m_peerPort);
 
   if (!m_targetedAddresses.empty ()) 
@@ -294,7 +393,7 @@ void
 ScanTools::AddToTargetList (Ipv6Address victimAddress)
 {
   NS_LOG_FUNCTION (this << victimAddress);
-  m_victimAddresses.push_back (victimAddress);
+  m_victimAddresses.insert (victimAddress);
 }
 
 void
@@ -305,10 +404,13 @@ ScanTools::HandleRead (Ptr<Socket> socket)
   Address from;
   if ((packet = socket->RecvFrom (from)))
     {
+      Ipv6Address sender(Inet6SocketAddress::ConvertFrom (from).GetIpv6 ());
+
+      // save the incomming packet time in the map
+      record[sender].push_back (Simulator::Now ());
       NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s attacker received " << packet->GetSize () << " bytes from " <<
-                   Inet6SocketAddress::ConvertFrom (from).GetIpv6 () << " port " <<
-                   Inet6SocketAddress::ConvertFrom (from).GetPort ());
-      AddToTargetList (Inet6SocketAddress::ConvertFrom (from).GetIpv6 ());
+                   sender << " port " << Inet6SocketAddress::ConvertFrom (from).GetPort ());
+      AddToTargetList (sender);
     }
 }
 

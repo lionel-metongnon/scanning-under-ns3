@@ -1,6 +1,6 @@
 /* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright  (c) 2011 The Boeing Company
+ * Copyright (c) 2015 Universite catholique de Louvain
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -46,6 +46,7 @@ public:
    * \brief Contructor with the number of nodes.
    */
   Network (uint32_t nbrOfNodes);
+  Network(NodeContainer nodes);
   /**
    * \brief Retrieve the router node (s).
    *
@@ -77,12 +78,10 @@ public:
    * \param index the index of the requested NetDevice
    * \returns the requested NetDevice.
    */
-  virtual void SetMobility (std::vector<double> xy) = 0;
+  virtual void SetMobility (std::vector<double> xy, bool isNodeMobile=false) = 0;
     /**
    * \brief configure the L2 layer of the node(s).
    *
-   * \param index the index of the requested NetDevice
-   * \returns the requested NetDevice.
    */
   virtual void ConfigureL2 () = 0;
   /**
@@ -93,7 +92,7 @@ public:
    */
   virtual void EnableRouting (Ipv6ListRoutingHelper &listRH, RipNgHelper &ripNgRouting, uint32_t priority);
   /**
-   * \brief Retrieve the container of the router node (s).
+   * \brief configure the L3 layer of the node(s).
    *
    * \param index the index of the requested NetDevice
    * \returns the requested NetDevice.
@@ -107,7 +106,10 @@ public:
    */
   virtual std::vector<Ipv6Address> GetNodesAddresses (void);
   virtual Ipv6InterfaceContainer GetIpv6Interfaces (void);
-  virtual void EnablePcap (bool promiscious) = 0;
+  virtual void EnablePcap(std::string pcapFileName, bool promiscious = false) = 0;
+  virtual void EnablePcapRouter(std::string pcapFileName) = 0;
+  virtual void EnableAscii(std::string fileName) = 0;
+
 
   virtual ~Network();
 

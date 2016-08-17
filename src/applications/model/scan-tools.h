@@ -1,7 +1,7 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright 2007 University of Washington
- * 
+ * Copyright (c) 2015 Universite catholique de Louvain
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation;
@@ -14,6 +14,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * Author: Lionel Metongnon <lionel.metongnon@uclouvain.be>
  */
 
 #ifndef SCAN_TOOLS_H
@@ -50,6 +52,14 @@ public:
    */
   static TypeId GetTypeId (void);
 
+  enum ScanType
+    {
+      INTERLACE = 0,
+      WIFI_FIRST,
+      WIFI_ONLY,
+      SIXLOWPAN_FIRST,
+      SIXLOWPAN_ONLY
+    };
   ScanTools ();
 
   virtual ~ScanTools ();
@@ -99,6 +109,7 @@ public:
   uint32_t GetDataSize (void) const;
 
   void SetTargetedNetworks (std::map<Ipv6Address, Ipv6Prefix> &targetedNetworks);
+  void SetScanType (ScanTools::ScanType scanType);
 
 protected:
   virtual void DoDispose (void);
@@ -116,6 +127,7 @@ private:
    */
   void Send (void);
 
+  void Save (void);
 
   /**
    * \brief Handle a packet reception.
@@ -132,6 +144,7 @@ private:
 
   uint32_t m_dataSize; //!< packet payload size (must be equal to m_size)
   uint8_t *m_data; //!< packet payload data
+  ScanTools::ScanType m_scanType;
 
   uint32_t m_sent; //!< Counter for sent packets
   Ptr<Socket> m_socket; //!< Socket
@@ -139,8 +152,10 @@ private:
   std::map<Ipv6Address, Ipv6Prefix> m_targetedNetworks;
   uint16_t m_peerPort; //!< Remote peer port
   std::list<Ipv6Address> m_targetedAddresses;
-  std::list<Ipv6Address> m_victimAddresses;
+  std::set<Ipv6Address> m_victimAddresses;
   EventId m_sendEvent; //!< Event to send the next packet
+  std::map<Ipv6Address, std::vector<Time> > record ;
+
   // Timer m_time; //!< waiting time before changing address for scanning 
   // struct hostAlive {
   //   Ipv6Address address; //!< Target address

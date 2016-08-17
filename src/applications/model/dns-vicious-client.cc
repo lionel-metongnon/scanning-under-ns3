@@ -1,7 +1,7 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright 2007 University of Washington
- * 
+ * Copyright (c) 2015 Universite catholique de Louvain
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation;
@@ -14,7 +14,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * Author: Lionel Metongnon <lionel.metongnon@uclouvain.be>
  */
+ 
 #include "ns3/log.h"
 #include "ns3/nstime.h"
 #include "ns3/inet6-socket-address.h"
@@ -132,7 +135,6 @@ DnsViciousClient::ViciousMode ()
 
   m_socket->SetRecvCallback (MakeCallback (&DnsViciousClient::HandleRead, this));
   ScheduleTransmit (Seconds (0.));
-
 }
 
 void 
@@ -146,7 +148,6 @@ DnsViciousClient::StopApplication ()
       m_socket->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
       m_socket = 0;
     }
-
   Simulator::Cancel (m_sendEvent);
 }
 

@@ -490,6 +490,9 @@ TapBridge::CreateTap (void)
 
       std::ostringstream ossPath;
       ossPath << "-p" << path;
+      
+      std::ostringstream ossVersion;
+      ossVersion << "-e" << "4";
       //
       // Execute the socket creation process image.
       //
@@ -502,6 +505,7 @@ TapBridge::CreateTap (void)
                          ossNetmask.str ().c_str (),          // argv[5] (-n<net mask>)
                          ossMode.str ().c_str (),             // argv[6] (-o<operating mode>)
                          ossPath.str ().c_str (),             // argv[7] (-p<path>)
+                         ossVersion.str ().c_str (),          // argv[8] (-n<ip version>)
                          (char *)NULL);
 
       //

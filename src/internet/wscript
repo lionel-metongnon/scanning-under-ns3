@@ -208,10 +208,12 @@ def build(bld):
         'model/ripng-header.cc',
         'helper/ripng-helper.cc',
         'helper/network.cc',
-        'helper/sixlowpan-network.cc',
-        'helper/wifi-network.cc',
-        'helper/csma-network.cc',
-        'helper/router-csma-network.cc',
+        'helper/wireless-network.cc',
+        'helper/wire-network.cc',
+#        'helper/sixlowpan-network.cc',
+#        'helper/wifi-network.cc',
+#        'helper/csma-network.cc',
+#        'helper/router-csma-network.cc',
         'model/ipv6-address-list.cc',
         ]
 
@@ -346,10 +348,12 @@ def build(bld):
         'model/ripng-header.h',
         'helper/ripng-helper.h',
         'helper/network.h',
-        'helper/sixlowpan-network.h',
-        'helper/wifi-network.h',
-        'helper/csma-network.h',
-        'helper/router-csma-network.h',
+        'helper/wireless-network.h',
+        'helper/wire-network.h',
+#        'helper/sixlowpan-network.h',
+#        'helper/wifi-network.h',
+#        'helper/csma-network.h',
+#        'helper/router-csma-network.h',
         'model/ipv6-address-list.h',
        ]
 

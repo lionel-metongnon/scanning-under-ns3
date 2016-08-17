@@ -22,6 +22,7 @@
 #include "ns3/net-device-container.h"
 #include "ns3/object-factory.h"
 #include "ns3/tap-bridge.h"
+#include "ns3/tap-bridge6.h"
 #include <string>
 
 namespace ns3 {
@@ -41,7 +42,7 @@ public:
    * have their simulations interact with Linux tap devices and processes
    * on the Linux host.
    */
-  TapBridgeHelper ();
+  TapBridgeHelper (uint16_t ipVersion = 4);
 
   /**
    * Construct a TapBridgeHelper to make life easier for people wanting to 
@@ -51,7 +52,7 @@ public:
    * \param gateway An Ipv4Address to be used as the default gateway for 
    * the created bridges,
    */
-  TapBridgeHelper (Ipv4Address gateway);
+  TapBridgeHelper (Ipv4Address gateway, uint16_t ipVersion = 4);
 
   /**
    * Set an attribute in the underlying TapBridge net device when these
@@ -127,6 +128,7 @@ public:
   Ptr<NetDevice> Install (Ptr<Node> node, Ptr<NetDevice> nd, const AttributeValue &bridgeType);
 private:
   ObjectFactory m_deviceFactory; //!< Object factory
+  uint16_t m_version;
 };
 
 } // namespace ns3

@@ -1,7 +1,7 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright 2007 University of Washington
- * 
+ * Copyright (c) 2015 Universite catholique de Louvain
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation;
@@ -14,6 +14,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * Author: Lionel Metongnon <lionel.metongnon@uclouvain.be>
  */
 
 #ifndef COAP_CLIENT_H
@@ -39,7 +41,7 @@ class Packet;
 
 /**
  * \ingroup Iot Node App
- * \brief A CoAP server
+ * \brief A CoAP client
  *
  * Every packet received is sent back.
  */
@@ -84,15 +86,18 @@ private:
    * \param fill The string to use as the actual echo data bytes.
    */
   void SetFill (std::string fill);
-  std::string ToString (uint8_t *data, uint32_t size);
+
+  void ScheduleTransmit (Time dt, Ptr<Socket> socket, Address from, uint16_t count=1);
+  void Send (Ptr<Socket> socket, Address from);
 
   uint32_t m_dataSize; //!< packet payload size (must be equal to m_size)
   uint8_t *m_data; //!< packet payload data
   uint16_t m_port; //!< Port on which we listen for incoming packets.
   uint32_t m_sendSize; //!< Size of incoming packets.
   Ptr<UniformRandomVariable>  m_magic_number;
-  Ptr<Socket> m_socket6; //!< IPv6 Socket
-  Address m_local; //!< local multicast address
+  Ptr<Socket> m_socket; //!< IPv6 Socket
+  EventId m_sendEvent; //!< Event to send the next packet
+  Time m_interval; //!< Packet inter-send time
   std::map <Ipv6Address, float> attackerList;
 };
 

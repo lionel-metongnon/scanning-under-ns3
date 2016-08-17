@@ -31,6 +31,7 @@ def build(bld):
     module = bld.create_ns3_module('tap-bridge', ['internet', 'network', 'core'])
     module.source = [
         'model/tap-bridge.cc',
+        'model/tap-bridge6.cc',
         'model/tap-encode-decode.cc',
         'helper/tap-bridge-helper.cc',
         ]
@@ -38,6 +39,7 @@ def build(bld):
     headers.module = 'tap-bridge'
     headers.source = [
         'model/tap-bridge.h',
+        'model/tap-bridge6.h',
         'helper/tap-bridge-helper.h',
         'doc/tap.h',
         ]
@@ -46,6 +48,7 @@ def build(bld):
         tap_creator = bld.create_suid_program('tap-creator')
         tap_creator.source = [
             'model/tap-creator.cc',
+#            'model/tap-creator6.cc',
             'model/tap-encode-decode.cc',
             ]
 

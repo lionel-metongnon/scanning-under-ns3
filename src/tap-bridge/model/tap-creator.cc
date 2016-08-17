@@ -34,6 +34,7 @@
 #include <linux/if_tun.h>
 #include <net/route.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "tap-encode-decode.h"
 
@@ -291,7 +292,7 @@ CreateTap (const char *dev, const char *gw, const char *ip, const char *mac, con
   //
   struct ifreq ifr;
   ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
-  strcpy (ifr.ifr_name, dev);
+  strncpy (ifr.ifr_name, dev, IFNAMSIZ);
   int status = ioctl (tap, TUNSETIFF, (void *) &ifr);
   ABORT_IF (status == -1, "Could not allocate tap device", true);
 
@@ -350,6 +351,102 @@ CreateTap (const char *dev, const char *gw, const char *ip, const char *mac, con
   return tap;
 }
 
+static int
+CreateTap6 (const char *dev, const char *gw, const char *ip, const char *mac, const char *mode, const char *prefix)
+{
+  struct in6_ifreq {
+    struct in6_addr ifr6_addr;
+    __u32 ifr6_prefixlen;
+    unsigned int ifr6_ifindex;
+  } ifr6;
+  //
+  // Creation and management of Tap devices is done via the tun device
+  //
+  int tap = open ("/dev/net/tun", O_RDWR);
+  ABORT_IF (tap == -1, "Could not open /dev/net/tun", true);
+
+  //
+  // Allocate a tap device, making sure that it will not send the tun_pi header.
+  // If we provide a null name to the ifr.ifr_name, we tell the kernel to pick
+  // a name for us (i.e., tapn where n = 0..255.
+  //
+  // If the device does not already exist, the system will create one.
+  //
+  struct ifreq ifr;
+  /* Flags: IFF_TUN   - TUN device (no Ethernet headers) 
+   *        IFF_TAP   - TAP device  
+   *
+   *        IFF_NO_PI - Do not provide packet information  
+   */ 
+  ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
+  strncpy (ifr.ifr_name, dev, IFNAMSIZ);
+  int status = ioctl (tap, TUNSETIFF, (void *) &ifr);
+  ABORT_IF (status == -1, "Could not allocate tap device", true);
+
+  std::string tapDeviceName = (char *)ifr.ifr_name;
+  LOG ("Allocated TAP device " << tapDeviceName);
+
+  //
+  // Operating mode "2" corresponds to USE_LOCAL and "3" to USE_BRIDGE mode.
+  // This means that we expect that the user will have named, created and 
+  // configured a network tap that we are just going to use.  So don't mess 
+  // up his hard work by changing anything, just return the tap fd.
+  //
+  if (strcmp (mode, "2") == 0 || strcmp (mode, "3") == 0)
+    {
+      LOG ("Returning precreated tap ");
+      return tap;
+    }
+
+  //
+  // Set the hardware (MAC) address of the new device
+  //
+  ifr.ifr_hwaddr.sa_family = 1; // this is ARPHRD_ETHER from if_arp.h
+  AsciiToMac48 (mac, (uint8_t*)ifr.ifr_hwaddr.sa_data);
+  status = ioctl (tap, SIOCSIFHWADDR, &ifr);
+  ABORT_IF (status == -1, "Could not set MAC address", true);
+  LOG ("Set device MAC address to " << mac);
+
+  int fd = socket (AF_INET6, SOCK_DGRAM, 0);
+
+  //
+  // Bring the interface up.
+  //
+  status = ioctl (fd, SIOCGIFFLAGS, &ifr);
+  ABORT_IF (status == -1, "Could not get flags for interface", true);
+  ifr.ifr_flags |= IFF_UP | IFF_RUNNING;
+  status = ioctl (fd, SIOCSIFFLAGS, &ifr);
+  ABORT_IF (status == -1, "Could not bring interface up", true);
+  LOG ("Device is up");
+
+  //
+  // Set the IP address of the new interface/device.
+  //
+  struct sockaddr_in6 si;
+  si.sin6_family = AF_INET6;
+  si.sin6_port = 0; // unused
+  // memcpy(si.sin6_addr.s6_addr, networkAddress, sizeof(networkAddress));
+  status = inet_pton(AF_INET6, ip, &si.sin6_addr);
+  ABORT_IF (status <= 0, "Bad IP address", true);
+
+  memcpy(&ifr6.ifr6_addr, &si.sin6_addr,
+             sizeof(struct in6_addr));
+
+  status = ioctl(fd, SIOGIFINDEX, &ifr);
+  ABORT_IF (status < 0, "SIOGIFINDEX", true);
+  
+  ifr6.ifr6_ifindex = ifr.ifr_ifindex;
+  std::stringstream ss;
+  ss << prefix;
+  ss >> ifr6.ifr6_prefixlen;
+
+  status = ioctl (fd, SIOCSIFADDR, &ifr6);
+  ABORT_IF (status == -1, "Could not set IP address", true);
+  LOG ("Set device IP address to " << ip);
+
+  return tap;
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -359,12 +456,14 @@ main (int argc, char *argv[])
   char *ip = NULL;
   char *mac = NULL;
   char *netmask = NULL;
+  char *prefix = NULL;
   char *operatingMode = NULL;
   char *path = NULL;
+  char *version = NULL;
 
   opterr = 0;
 
-  while ((c = getopt (argc, argv, "vd:g:i:m:n:o:p:")) != -1)
+  while ((c = getopt (argc, argv, "vd:g:i:m:x:n:o:p:e:")) != -1)
     {
       switch (c)
         {
@@ -383,11 +482,17 @@ main (int argc, char *argv[])
         case 'n':
           netmask = optarg;       // net mask for the new device
           break;
+        case 'x':
+          prefix = optarg;       // net prefix for the new device if ipv6
+          break;
         case 'o':
           operatingMode = optarg; // operating mode of tap bridge
           break;
         case 'p':
           path = optarg;          // path back to the tap bridge
+          break;
+        case 'e':
+          version = optarg;          // version of the ip back to the tap bridge
           break;
         case 'v':
           gVerbose = true;
@@ -402,6 +507,9 @@ main (int argc, char *argv[])
   // create the device for us.  This name is given in dev
   //
   LOG ("Provided Device Name is \"" << dev << "\"");
+
+  ABORT_IF (version == NULL, "Ip version is a required argument", 0);
+  LOG ("Provided IP Version is \"" << version << "\"");
 
   //
   // We have got to be able to provide a gateway to the external Linux host 
@@ -433,8 +541,21 @@ main (int argc, char *argv[])
   // allocating.  This mask is allocated in the simulation and given to
   // the bridged device.
   //
-  ABORT_IF (netmask == NULL, "Net Mask is a required argument", 0);
-  LOG ("Provided Net Mask is \"" << netmask << "\"");
+  if (strcmp(version, "4") == 0)
+    {
+      ABORT_IF (netmask == NULL, "Net Mask is a required argument", 0);
+      LOG ("Provided Net Mask is \"" << netmask << "\"");
+    }
+  else if (strcmp(version, "6") == 0)
+    {
+      ABORT_IF (prefix == NULL, "Ipv6 Prefix is a required argument", 0);
+      LOG ("Provided Prefix  is \"" << prefix << "\"");
+    }
+  else
+    {
+      ABORT_IF (prefix == NULL, "Wrong Ip version", 0);
+    }
+
 
   //
   // We have got to know whether or not to create the TAP.
@@ -465,7 +586,15 @@ main (int argc, char *argv[])
   // us to exeucte the following code:
   //
   LOG ("Creating Tap");
-  int sock = CreateTap (dev, gw, ip, mac, operatingMode, netmask);
+  int sock;
+  if (strcmp(version, "4") == 0)
+    {
+      sock = CreateTap (dev, gw, ip, mac, operatingMode, netmask);
+    }
+  else
+    {
+      sock = CreateTap6 (dev, gw, ip, mac, operatingMode, prefix);
+    } 
   ABORT_IF (sock == -1, "main(): Unable to create tap socket", 1);
 
   //

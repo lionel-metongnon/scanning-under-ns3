@@ -1,7 +1,7 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright 2007 University of Washington
- * 
+ * Copyright (c) 2015 Universite catholique de Louvain
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation;
@@ -14,7 +14,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * Author: Lionel Metongnon <lionel.metongnon@uclouvain.be>
  */
+ 
 #include "ns3/log.h"
 #include "ns3/abort.h"
 #include "ns3/assert.h"
@@ -27,9 +30,12 @@
 #include "ns3/packet.h"
 #include "ns3/uinteger.h"
 #include "ns3/trace-source-accessor.h"
+
 #include <algorithm>
 #include <cstdlib>
 #include <time.h>
+#include <fstream>
+
 #include "penetration-tools.h"
 
 namespace ns3 {
@@ -47,7 +53,7 @@ PenetrationTools::GetTypeId (void)
     .AddConstructor<PenetrationTools> ()
     .AddAttribute ("Interval", 
                    "The time to wait between packets",
-                   TimeValue (Seconds (1.0)),
+                   TimeValue (MilliSeconds (200)),
                    MakeTimeAccessor (&PenetrationTools::m_interval),
                    MakeTimeChecker ())
     .AddAttribute ("RemotePort", 
@@ -114,6 +120,9 @@ PenetrationTools::StartPenetration (std::list<Ipv6Address> &victimAddresses)
 {
   NS_LOG_FUNCTION (this);
   m_victimAddresses = victimAddresses;
+  networkSize = m_victimAddresses.size ();
+  // if we have a victim list, proccess to the penetration
+  // if not just stop the application
   if (m_victimAddresses.empty())
     {
       NS_LOG_INFO ("No victims to attack");
@@ -121,6 +130,7 @@ PenetrationTools::StartPenetration (std::list<Ipv6Address> &victimAddresses)
     }
   else
     {
+      SetFill("Penetration Attack");
       Penetration ();
     }
 }
@@ -129,6 +139,7 @@ void
 PenetrationTools::Penetration ()
 {
   NS_LOG_FUNCTION (this);
+  // Get the next victim address, connect to him and send the packet
   m_peerAddress = m_victimAddresses.front ();
   m_victimAddresses.pop_front ();
   if (m_socket == 0)
@@ -139,9 +150,32 @@ PenetrationTools::Penetration ()
   }
   m_socket->Connect (Inet6SocketAddress (m_peerAddress, m_peerPort));
   m_socket->SetRecvCallback (MakeCallback (&PenetrationTools::HandleRead, this));
-  SetFill("Penetration Attack");
-  ScheduleTransmit (Seconds (m_interval));
-  // Send ();
+  ScheduleTransmit (m_interval);
+}
+
+void
+PenetrationTools::Save (void)
+{
+  if (m_victimAddresses.empty())
+    {
+      std::ostringstream oss;
+      oss << GetDataSize();
+      oss << "_";
+      oss << networkSize;
+
+      std::ofstream resultFile;
+      resultFile.open ( std::string("./data/"+oss.str()+"_penetration.rst").c_str(), std::ofstream::out | std::ofstream::trunc);
+      resultFile << m_compromisedNodeAddress.size ();
+      resultFile.close ();
+      resultFile.open ( std::string("./data/"+oss.str()+"_penetration_details.rst").c_str(), std::ofstream::out | std::ofstream::trunc);
+      
+      for (std::set<Ipv6Address>::iterator i = m_compromisedNodeAddress.begin(); i != m_compromisedNodeAddress.end(); ++i)
+        {
+          // NS_LOG_INFO (*i);
+          resultFile << *i << std::endl;
+        }
+      resultFile.close ();
+    }
 }
 
 void 
@@ -155,6 +189,8 @@ PenetrationTools::StopApplication ()
       m_socket->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
       m_socket = 0;
     }
+  Simulator::Cancel (m_sendEvent);
+  Save ();
 }
 
 void 
@@ -199,15 +235,14 @@ PenetrationTools::SetFill (std::string fill)
   //
   // Overwrite packet size attribute.
   //
-  m_size = dataSize;
+  // m_size = dataSize; // I comment this line just to still has the original size pass in param for the plot name
 }
 
 void 
 PenetrationTools::ScheduleTransmit (Time dt)
 {
-  NS_LOG_FUNCTION (this << "200ms");
-  // m_sendEvent = Simulator::Schedule (dt, &PenetrationTools::Send, this);
-  m_sendEvent = Simulator::Schedule (Time ("200ms"), &PenetrationTools::Send, this);
+  NS_LOG_FUNCTION (this << dt);
+  m_sendEvent = Simulator::Schedule (dt, &PenetrationTools::Send, this);
 }
 
 void 
@@ -225,7 +260,7 @@ PenetrationTools::Send (void)
       // the Fill functions is called.  In this case, m_size must have been set
       // to agree with m_dataSize
       //
-      NS_ASSERT_MSG (m_dataSize == m_size, "PenetrationTools::Send(): m_size and m_dataSize inconsistent");
+      // NS_ASSERT_MSG (m_dataSize == m_size, "PenetrationTools::Send(): m_size and m_dataSize inconsistent");
       NS_ASSERT_MSG (m_data, "PenetrationTools::Send(): m_dataSize but no m_data");
       p = Create<Packet> (m_data, m_dataSize);
     }
@@ -250,6 +285,7 @@ PenetrationTools::Send (void)
   NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s attacker sent " << m_size << " bytes to " <<
                m_peerAddress << " port " << m_peerPort);
 
+  // If we have more victim continue the compromise attack
   if (!m_victimAddresses.empty ()) 
     {
       Penetration ();
@@ -270,18 +306,19 @@ PenetrationTools::HandleRead (Ptr<Socket> socket)
                    victim << " port " <<
                    Inet6SocketAddress::ConvertFrom (from).GetPort ());
       
+      // after getting the packet, scan the data to know if you compromised the node or failed
       uint32_t dataSize = packet->GetSize () - 1;
       uint8_t data[dataSize];
       packet->CopyData (data, dataSize);
       std::string sdata (data, data+dataSize);
-      if (sdata.compare ("Compromise done") == 0)
+      if (sdata.compare ("Host Compromise") == 0)
         {
-          m_compromisedNodeAddress.push_back (victim);
+          m_compromisedNodeAddress.insert (victim);
           NS_LOG_INFO ("I'm darth vador and I crushed " << victim << " with my attack");
         }
       else
         {
-          NS_LOG_INFO ("Damn " << victim << " survived to my attack. The force is with you");
+          NS_LOG_INFO (victim << " survived to my attack. The force is with you!!!");
         }
     }
 }

@@ -1,7 +1,7 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright 2007 University of Washington
- * 
+ * Copyright (c) 2015 Universite catholique de Louvain
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation;
@@ -14,6 +14,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * Author: Lionel Metongnon <lionel.metongnon@uclouvain.be>
  */
 
 #ifndef COAP_SERVER_H
@@ -37,9 +39,9 @@ class Packet;
 
 /**
  * \ingroup udpecho
- * \brief A Udp Echo client
+ * \brief A CoAP server
  *
- * Every packet sent should be returned by the server and received here.
+ * Every packet sent should be returned by the client and received here.
  */
 class CoapServer : public Application 
 {
@@ -85,7 +87,18 @@ public:
    * \returns The number of data bytes.
    */
   uint32_t GetDataSize (void) const;
-
+  
+  /**
+   * Set the data fill of the packet (what is sent as data to the server) to 
+   * the zero-terminated contents of the fill string string.
+   *
+   * \warning The size of resulting echo packets will be automatically adjusted
+   * to reflect the size of the fill string -- this means that the PacketSize
+   * attribute may be changed as a result of this call.
+   *
+   * \param fill The string to use as the actual echo data bytes.
+   */
+  void SetFill (std::string fill);
   void SetClientAddresses (std::vector<Ipv6Address> &clientAddresses);
 
 protected:
@@ -115,9 +128,11 @@ private:
 
   uint32_t m_count; //!< Maximum number of packets the application will send
   Time m_interval; //!< Packet inter-send time
+  Time m_delay; //!< Packet inter-send time
   uint32_t m_size; //!< Size of the sent packet
   uint32_t m_index;
 
+  uint8_t *m_data; //!< packet payload data
   uint32_t m_sent; //!< Counter for sent packets
   Ptr<Socket> m_socket; //!< Socket
   Ipv6Address m_peerAddress;

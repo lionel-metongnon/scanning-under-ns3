@@ -20,6 +20,7 @@
 #include "ns3/node.h"
 #include "ns3/enum.h"
 #include "ns3/tap-bridge.h"
+#include "ns3/tap-bridge6.h"
 #include "ns3/names.h"
 #include "tap-bridge-helper.h"
 
@@ -27,16 +28,33 @@ namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("TapBridgeHelper");
 
-TapBridgeHelper::TapBridgeHelper ()
+TapBridgeHelper::TapBridgeHelper (uint16_t ipVersion)
 {
   NS_LOG_FUNCTION_NOARGS ();
-  m_deviceFactory.SetTypeId ("ns3::TapBridge");
+  m_version = ipVersion;
+  if (ipVersion == 4)
+    {
+      m_deviceFactory.SetTypeId ("ns3::TapBridge");
+    }
+  else
+    {
+      m_deviceFactory.SetTypeId ("ns3::TapBridge6");
+    }
 }
 
-TapBridgeHelper::TapBridgeHelper (Ipv4Address gateway)
+TapBridgeHelper::TapBridgeHelper (Ipv4Address gateway, uint16_t ipVersion)
 {
   NS_LOG_FUNCTION_NOARGS ();
-  m_deviceFactory.SetTypeId ("ns3::TapBridge");
+  m_version = ipVersion;
+  if (ipVersion == 4)
+    {
+      m_deviceFactory.SetTypeId ("ns3::TapBridge");
+    }
+  else
+    {
+      m_deviceFactory.SetTypeId ("ns3::TapBridge6");
+    }
+  
   SetAttribute ("Gateway", Ipv4AddressValue (gateway));
   SetAttribute ("Mode", EnumValue (TapBridge::CONFIGURE_LOCAL));
 }
@@ -63,11 +81,23 @@ TapBridgeHelper::Install (Ptr<Node> node, Ptr<NetDevice> nd)
   NS_LOG_FUNCTION (node << nd);
   NS_LOG_LOGIC ("Install TapBridge on node " << node->GetId () << " bridging net device " << nd);
 
-  Ptr<TapBridge> bridge = m_deviceFactory.Create<TapBridge> ();
-  node->AddDevice (bridge);
-  bridge->SetBridgedNetDevice (nd);
+  if (m_version == 4)
+    {
+      Ptr<TapBridge> bridge = m_deviceFactory.Create<TapBridge> ();
+      node->AddDevice (bridge);
+      bridge->SetBridgedNetDevice (nd);
 
-  return bridge;
+      return bridge;
+    }
+  else
+    {
+      Ptr<TapBridge6> bridge = m_deviceFactory.Create<TapBridge6> ();
+      node->AddDevice (bridge);
+      bridge->SetBridgedNetDevice (nd);
+
+      return bridge;
+    }
+    return NULL;
 }
 
 Ptr<NetDevice>
